@@ -1,0 +1,244 @@
+---
+title: "NeDCwor"
+author: "MohammedBaaoum"
+date: "11/24/2020"
+output: html_document
+---
+
+```{r}
+library(MASS)
+library(car)
+library(pROC)
+library(rpart)
+library(boot)
+library(QuantPsyc)
+library(lm.beta)
+```
+
+•	Patient  Length of Stay (LOS)  is an important indicator of emergency department (ED) performance that correlates strongly with overcrowding 
+•	Prolonged  LOS is viewed as evidence of poor hospital performance and has been associated with a higher mortality rate  and lower patient satisfaction (Pitts et al., 2014, Singer, 2011).
+•	It is estimated that reducing ED LOS by 1 hour could decrease the number of deaths in high-risk  patients by 6.5% and by almost 13% in lower-risk patients (Barish, & Arnold  , 2012). 
+
+
+# Objective: Examine the association between LOS and multi-level factors including patient-, service- and organization-level factors. 
+#	RQ1.  What patient-related factors have a significant association with patient length of stay? 
+#	RQ2.  What service-related factors have a significant association with patient length of stay? 
+#	RQ3.  What organizational factors have a significant association with patient length of stay? 
+
+
+
+
+#Data filted2 after delting patient who went to Norht Phd after entinring normal posds
+```{r}
+EDdata3 <- read.csv ("SelctedDataFilter2New_MergAmb.csv", header=TRUE)
+names(EDdata3)
+```
+# Select relvant variables  based on stakholder intreve and lit review 
+
+#Patient Factors: Gender,Age.Group,  ESILevel, TransportArrive, Arrival.Shift..1st..12.AM.,FinalDiagnosis,DispoType,Month, 
+
+# service :  Ward.Change, FirstWard, EDLevel
+
+# Organizational: PatientsPerMD_Mean_Rd,PatientsPerNURSE_Mean, PatientsPerPA_RESIDENT_Mean_Rd , 
+```{r}
+LOSnoNorthTrans <- EDdata3$LOS.rounded
+EDdatanoNorthTrans <-cbind(LOSnoNorthTrans,EDdata3[,c(5,9,21,22,24,25,27,30,31,34,38,42,44,46)])
+names(EDdatanoNorthTrans)
+```
+
+
+#Check LOS 
+```{r}
+require(lattice)
+require(openintro)
+histogram(x= EDdatanoNorthTrans$LOSnoNorthTrans,breaks = 20, data=EDdatanoNorth)
+densityplot(x= EDdatanoNorthTrans$LOSnoNorthTrans,data=EDdatanoNorth)
+```
+
+# Charactrestic of patient byond 24 hours in ED
+```{r}
+EDdataByond24_No_NorthTrans<-subset(EDdatanoNorthTrans,EDdatanoNorthTrans$LOSnoNorthTrans>24)
+EDdataByond24_No_North_Trans_noNA<- na.omit(EDdataByond24_No_NorthTrans)  #EDdata4 same as ED3.5 but we removed NA 
+table(EDdataByond24_No_North_Trans_noNA$FinalDiagnosis)
+```
+#44 observation majoirity are metnal ilneessed . As disscussed wit stakholders they considred outlier and decided not to include them in the model. 
+
+___________________Delting Values More than 24 hours and Delting NA values-------
+
+
+#Data after eliminating North & Sounth, Beharioal probelm and Transfer to North the outliers, Elimating data byond 24 hours ( Data contain NA First wards)
+```{r}
+EDdataBelow24_No_NorthTrans<-subset(EDdatanoNorthTrans,EDdatanoNorthTrans$LOSnoNorthTrans<24)
+EDdataBelow24_No_NorthTrans2<- na.omit (EDdataBelow24_No_NorthTrans) ####Delet NA Values (560 Value NA)
+tail(EDdataBelow24_No_NorthTrans2)
+```
+
+#LOS histogram 
+```{r}
+require(lattice)
+require(openintro)
+histogram(x= EDdataBelow24_No_NorthTrans2$LOSnoNorthTrans,breaks = 20, data=EDdataBelow24_No_NorthTrans2)
+densityplot(x= EDdataBelow24_No_NorthTrans2$LOSnoNorthTrans,data=EDdataBelow24_No_NorthTrans2)
+
+```
+
+
+# More mental iliness casses
+#Removing Suicidal ideation and Depression and Psychosis (43), Observation 
+#Check how it goes if I elminate all the metal inless patien from the data. 
+
+```{r}
+EDdataBelow24_No_NorthTrans2_NoSI <- subset(EDdataBelow24_No_NorthTrans2,EDdataBelow24_No_NorthTrans2$FinalDiagnosis != "Suicidal ideation") #deliting socidal ideadtion
+
+EDdataBelow24_No_NorthTrans2_NoSIORDep <- subset(EDdataBelow24_No_NorthTrans2_NoSI ,EDdataBelow24_No_NorthTrans2_NoSI$FinalDiagnosis != "Depression") ## No SI Nor Depression 
+
+EDdataBelow24_No_NorthTrans2_NOmental <-  subset(EDdataBelow24_No_NorthTrans2_NoSIORDep ,EDdataBelow24_No_NorthTrans2_NoSIORDep$FinalDiagnosis != "Psychosis")
+```
+
+
+#LOS histogram after elminating SI and Depresstion 
+```{r}
+require(lattice)
+require(openintro)
+histogram(x= EDdataBelow24_No_NorthTrans2_NOmental$LOSnoNorthTrans,breaks = 20, data=EDdataBelow24_No_NorthTrans2_NOmental)
+densityplot(x= EDdataBelow24_No_NorthTrans2_NOmental$LOSnoNorthTrans,data=EDdataBelow24_No_NorthTrans2_NOmental)
+
+```
+
+# rename and orgnize the dataset
+
+# Data withouht Noth or Sounth(First or Last), no Mental inlness(SI, Depression and Psycosis), no NA, no NA or Negative valeues
+````{r}
+
+LOSfselcted <- EDdataBelow24_No_NorthTrans2_NOmental$LOSnoNorthTrans
+EDdatfselcted <-cbind(LOSfselcted,EDdataBelow24_No_NorthTrans2_NOmental[,c(2:15)])
+names(EDdatfselcted)
+
+write.csv(EDdatfselcted, file = "EDdatfselcted.csv")
+
+```
+
+
+# converting Patient Per MD and Patient Per Nurse to Numric to calculate corr
+```{r}
+EDdatfselcted$PatientsPerMD_Mean_Rd<- as.numeric(as.character(EDdatfselcted$PatientsPerMD_Mean_Rd))
+EDdatfselcted$PatientsPerNURSE_Mean_Rd<- as.numeric(as.character(EDdatfselcted$PatientsPerNURSE_Mean_Rd))
+EDdatfselcted$PatientsPerPA_RESIDENT_Mean_Rd <- 
+as.numeric(as.character(EDdatfselcted$PatientsPerPA_RESIDENT_Mean_Rd))
+
+na.omit(EDdatfselcted)
+
+
+```
+
+
+
+#test correlathion between numerical valeus 
+
+Teset Correlathions
+```{r}
+
+Org <- cbind(EDdatfselcted[,c(11,12,13)])
+
+# Combine the columns into a matrix
+#Org <- do.call(cbind, Org)
+# Calculate the correlation matrix
+cor_matrix <- cor(Org, use = "pairwise.complete.obs")
+cor_matrix 
+```
+
+
+# Ploting to test linearity assumption 
+
+```{r}
+par(mfrow = c(2, 2), mai = c(0.6, 0.5, 0.2, 0.1))
+for (i in 2:15) {
+  x <- EDdatfselcted[, i]
+  y <- EDdatfselcted$LOSfselcted
+  valid_indices <- complete.cases(x, y) & is.finite(x) & is.finite(y)
+  
+  if (any(valid_indices)) {
+    plot(x[valid_indices], y[valid_indices], xlab = names(EDdatfselcted)[i], ylab = "Length of Stay", col = 3, pch = 20)
+  }
+}
+
+
+```
+
+
+#Transfomation (Log) before regression to reslove noninearity issues, rename variables
+```{r}
+#names(EDdatfselcted)
+
+EDdataTranform<- data.frame(LOS= log(EDdatfselcted$LOSfselcted), Arrival_Shift = EDdatfselcted$Arrival.Shift..1st..12.AM. ,Arrival_Day = EDdatfselcted$Arrival.Day, ESLIndex = EDdatfselcted$ESILevel, gender= EDdatfselcted$Gender,Age_group= EDdatfselcted$Age.Group, EDlevel= EDdatfselcted$EDLevel ,Discharge_type = EDdatfselcted$DispoType, Arrival_Mode= EDdatfselcted$TransportArrive, PA_MD= log(EDdatfselcted$PatientsPerMD_Mean_Rd), PA_NA=log(EDdatfselcted$PatientsPerNURSE_Mean_Rd) , PA_Res= log(EDdatfselcted$PatientsPerPA_RESIDENT_Mean_Rd) , first_ward= EDdatfselcted$FirstWard, Ward_Trans= EDdatfselcted$Ward.Change)
+
+
+names(EDdataTranform)
+```
+
+## Taking off the week end (limt the study to week days) 
+subset(EDdatanoNorthTrans,EDdatanoNorthTrans$LOSnoNorthTrans<24)                     
+
+```{r}
+EDWeekdays <- subset(EDdataTranform,EDdataTranform$Arrival_Day !="Sun")
+EDWeekdays1 <- subset(EDWeekdays,EDWeekdays$Arrival_Day!= "Sat")
+
+```
+
+# eliminate direct admit observation 
+
+```{r}
+NoDirectadmit <-subset(EDWeekdays1,EDWeekdays1$ESLIndex!= "Direct Admit")
+```
+
+
+# Ensure no NA before modeling 
+```{r}
+NoDirectadmitNoNa<- na.omit(NoDirectadmit)
+```
+
+----------------------------------Model Bulding-----------------
+# Step by step  model bulding ( patient charactrisitcs)
+
+```{r}
+
+model1org<- lm(LOS~ gender+ Age_group+ESLIndex+Arrival_Shift+Arrival_Mode+Discharge_type, data =EDdataTranform)
+summary(model1org)
+
+```
+
+
+# Model2--adding service related variabels : first_ward + Ward_Trans+ EDlevel
+```{r}
+model2org <- lm(LOS~ gender+ Age_group +ESLIndex+Arrival_Shift+Arrival_Mode+Discharge_type+first_ward+Ward_Trans+EDlevel, data =NoDirectadmit )
+
+summary(model2org)
+
+```
+
+
+## Add orgnizational variable 
+
+##Model3 : PA_NA+PA_MD+ PA_Res
+```{r}
+install.packages("car")
+library(car)
+library(lm.beta)
+model3org <- lm(LOS~ gender+ Age_group +ESLIndex+Arrival_Shift+Arrival_Mode+Discharge_type+first_ward+Ward_Trans+EDlevel+ PA_NA+PA_MD+ PA_Res, data =NoDirectadmit )
+summary(model3org)
+vif(model3org)
+
+
+```
+
+# Residual for Model 3 with tranfroming LOS 
+```{r}
+par(mfrow=c(2,2), mai=c(.6,.5,.2,.1))
+plot(model3org$fitted, model3org$resid, col=2, pch=20)
+abline(h=0, col=4, lty=2)
+qqnorm(rstudent(model3org), col=2, pch=20, main="")
+abline(a=0,b=1,col=4)
+hist(rstudent(model3org), col=2, xlab="Studentized Residuals", main="")
+```
+
+
